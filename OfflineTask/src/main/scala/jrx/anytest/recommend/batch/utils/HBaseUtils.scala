@@ -5,7 +5,7 @@ import org.apache.commons.lang.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory, Put, Result}
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase._
+import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration, HColumnDescriptor, HConstants, HTableDescriptor, KeyValue, TableName}
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.mapreduce.{HFileOutputFormat2, LoadIncrementalHFiles, TableInputFormat, TableOutputFormat}
 import org.apache.spark.rdd.RDD
@@ -264,6 +264,14 @@ object HBaseUtils extends Serializable {
     doBulkLoad(tableName, bulkPath, hbaseConn.getConfiguration, hbaseConn)
   }
 
+  /**
+    * 将HFile导入HBase
+    *
+    * @param tableName 表名
+    * @param bulkPath  HFile路径
+    * @param hBaseConf 配置
+    * @param hBaseConn HBase连接
+    */
   def doBulkLoad(tableName: String, bulkPath: String, hBaseConf: Configuration, hBaseConn: Connection): Unit = {
     val hTableName = TableName.valueOf(tableName)
     logger.info(s"Heartbeat - bulk load ,HFile path :$bulkPath")
@@ -276,10 +284,16 @@ object HBaseUtils extends Serializable {
         hBaseConn.getTable(hTableName),
         hBaseConn.getRegionLocator(hTableName)
       )
-    logger.info("Hearbeat - bulk load finish,耗时：{} ms", System.currentTimeMillis() - time)
+    logger.info("Heartbeat - bulk load finish,耗时：{} ms", System.currentTimeMillis() - time)
 
   }
 
+  /**
+    * 删除HDFS上的文件
+    *
+    * @param sparkContext sparkContext
+    * @param hadoopPath   hadoop文件地址
+    */
   def delHadoopFile(sparkContext: SparkContext, hadoopPath: String*): Unit = {
     val hdfs = FileSystem.get(sparkContext.hadoopConfiguration)
     hadoopPath.foreach(p => {
@@ -295,6 +309,130 @@ object HBaseUtils extends Serializable {
         logger.info(s"hdfs路径不存在[$p],不需要删除")
       }
     })
+  }
+
+  /**
+    * Put 转KeyValue数组
+    * @param put 对象
+    * @return
+    */
+  def putToKeyValue(put: Put): Array[OrderedKeyValue] = {
+    put.getFamilyCellMap.asScala
+      .flaMap(_._2.asScala)
+      .map(cell => new OrderedKeyValue(cell.asInstanceOf[KeyValue]))
+      .toArray
+  }
+
+  def savePutAsHadoopHFile(rdd: RDD[Put], partitioner: Partitioner, job: Job): Unit = {
+    val time = System.currentTimeMillis()
+    rdd.filter(_ != null)
+      .flatMap(putToKeyValue)
+      .map((_, null))
+      .repartitionAndSortWithinPartitions(partitioner)
+      .map(x => (x._1.toBytesWritable, x._1.getKeyValue))
+      .saveAsNewAPIHadoopDataset(job.getConfiguration)
+    logger.info(s"Heartbeat - 保存HFile到HDFS结束,耗时：${System.currentTimeMillis() - time}ms")
+  }
+
+  def saveKeyValueAsHadoopHFile(rdd: RDD[KeyValue], partitioner: Partitioner, job: Job): Unit = {
+    val time = System.currentTimeMillis()
+    rdd.filter(_ != null)
+      .map(kv => (new OrderedKeyValue(kv), null))
+      .repartitionAndSortWithinPartitions(partitioner)
+      .map(x => (x._1.toBytesWritable, x._1.getKeyValue))
+      .saveAsNewAPIHadoopDataset(job.getConfiguration)
+    logger.info(s"Heartbeat - 保存HFile到HDFS结束,耗时：${System.currentTimeMillis() - time}ms")
+  }
+
+  def saveOrderedKeyValueAsHadoopFile(rdd: RDD[OrderedKeyValue], partitioner: Partitioner, job: Job): Unit = {
+    val time = System.currentTimeMillis()
+    rdd.filter(_ != null)
+      .map(kv => (kv, null))
+      .repartitionAndSortWithinPartitions(partitioner)
+      .map(x => (x._1.toBytesWritable, x._1.getKeyValue))
+      .saveAsNewAPIHadoopDataset(job.getConfiguration)
+    logger.info(s"Heartbeat - 保存Hfile到HDFS结束，耗时：${System.currentTimeMillis() - time}ms")
+  }
+
+  def hFilePartitioner(conf: Configuration, tableName: String, hBaseConn: Connection, maxFilePerRegionPerFamily: Int): Partitioner = {
+    hFilePartitioner(
+      conf,
+      hBaseConn.getRegionLocator(TableName.valueOf(tableName)).getStartKeys,
+      maxFilePerRegionPerFamily
+    )
+  }
+
+  def hFilePartitioner(conf: Configuration, splitKeys: Array[Array[Byte]], maxFileRegionPerFamily: Int): Partitioner = {
+    logger.info("Heartbeat -HBase table splitKeys:", splitKeys.map(Bytes.toString).mkString(","))
+    if (maxFileRegionPerFamily == 1) {
+      logger.info("Heartbeat - One HFile per region per family")
+      new SingleHFilePartitioner(splitKeys)
+    } else {
+      val fraction = 1 max maxFileRegionPerFamily min conf.getInt(LoadIncrementalHFiles.MAX_FILES_PER_REGION_PER_FAMILY, 32)
+      logger.info("Heartbeat =[{}] HFiles per region per family")
+      new MultiHFilePartitioner(splitKeys,fraction)
+    }
+  }
+
+  /**
+    * 可排序的 KeyValue
+    *
+    * @param keyValue keyValue
+    */
+  class OrderedKeyValue(var keyValue: KeyValue) extends Serializable with Ordered[OrderedKeyValue] {
+    def getKeyValue: KeyValue = {
+      this.keyValue
+    }
+
+    def cloneRow: Array[Byte] = {
+      CellUtil.cloneRow(getKeyValue)
+    }
+
+    def toBytesWritable: ImmutableBytesWritable = {
+      new ImmutableBytesWritable(cloneRow)
+    }
+
+    override def compare(that: OrderedKeyValue): Int = {
+      KeyValue.COMPARATOR.compare(this.getKeyValue, that.getKeyValue)
+    }
+  }
+
+  /**
+    * 每个分区一个HFile
+    * @param splitKeys 分区数
+    */
+  protected class SingleHFilePartitioner(splitKeys: Array[Array[Byte]]) extends Partitioner {
+    override def numPartitions: Int = splitKeys.length
+
+    override def getPartition(key: Any): Int = {
+      val rowKey = key.asInstanceOf[OrderedKeyValue].cloneRow
+      for (i <- 1 until splitKeys.length) {
+        if (Bytes.compareTo(rowKey, splitKeys(i)) < 0) {
+          return i - 1
+        }
+      }
+      splitKeys.length - 1
+    }
+  }
+
+  /**
+    * 每个分区多个HFile
+    * @param splitKeys 分区数
+    * @param fraction 分区数
+    */
+  protected class MultiHFilePartitioner(splitKeys: Array[Array[Byte]], fraction: Int) extends Partitioner {
+    override def numPartitions: Int = splitKeys.length * fraction
+
+    override def getPartition(key: Any): Int = {
+      val rowKey = key.asInstanceOf[OrderedKeyValue].cloneRow
+      val h = (rowKey.hashCode() & Int.MaxValue) % fraction * splitKeys.length
+      for (i <- 1 until splitKeys.length) {
+        if (Bytes.compareTo(rowKey, splitKeys(i)) < 0) {
+          return i - 1 + h
+        }
+      }
+      splitKeys.length - 1 + h
+    }
   }
 
 }
