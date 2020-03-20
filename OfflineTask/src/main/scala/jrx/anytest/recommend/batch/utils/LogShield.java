@@ -178,7 +178,16 @@ public class LogShield {
     public static IndexPatten toPattern(int beginIndex, int length, String regex) {
         return new IndexPatten(beginIndex, length, toPattern("", regex, ""));
     }
+
     //TODO 手机号脱敏
+    public static String phone(String str) {
+        str = nullToEmpty(str);
+        return custom(str, ADDRESS_PSTTERN, "***$1");
+    }
+
+    private static String nullToEmpty(String str) {
+        return str == null ? "" : str.trim();
+    }
 
     private static void checkLength(int len, int length) {
         if (len != length) {
