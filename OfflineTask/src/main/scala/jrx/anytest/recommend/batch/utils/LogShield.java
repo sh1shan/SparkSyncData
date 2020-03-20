@@ -53,10 +53,10 @@ public class LogShield {
      * 编译正则
      */
     private static final Pattern PHONE_PATTERN = Pattern.compile(PHONE_REGEX);
-    private static final Pattern ID_CARD_PSTTERN = Pattern.compile(ID_CARD_REGEX);
-    private static final Pattern NAME_PSTTERN = Pattern.compile(NAME_REGEX);
-    private static final Pattern TELEPHONE_PSTTERN = Pattern.compile(TELEPHONE_REGEX);
-    private static final Pattern ADDRESS_PSTTERN = Pattern.compile(ADDRESS_REGEX);
+    private static final Pattern ID_CARD_PATTERN = Pattern.compile(ID_CARD_REGEX);
+    private static final Pattern NAME_PATTERN = Pattern.compile(NAME_REGEX);
+    private static final Pattern TELEPHONE_PATTERN = Pattern.compile(TELEPHONE_REGEX);
+    private static final Pattern ADDRESS_PATTERN = Pattern.compile(ADDRESS_REGEX);
 
     /**
      * 替换规则
@@ -182,7 +182,7 @@ public class LogShield {
     //TODO 手机号脱敏
     public static String phone(String str) {
         str = nullToEmpty(str);
-        return custom(str, ADDRESS_PSTTERN, "***$1");
+        return custom(str, ADDRESS_PATTERN, "***$1");
     }
 
     private static String nullToEmpty(String str) {
