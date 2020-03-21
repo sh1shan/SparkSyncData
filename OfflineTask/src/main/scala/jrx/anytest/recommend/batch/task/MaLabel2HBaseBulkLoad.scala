@@ -21,7 +21,7 @@ class MaLabel2HBaseBulkLoad(appName: String, master: String) extends BaseSparkTa
   for (i <- colArray.indices) {
     logger.info(s"第${i + 1}列位：${colArray(i)}")
   }
-  val TASK_NAME = "TASK NAME [sync Ma 标签表到HBase表: MaLabel]"
+  val TASK_NAME = "TASK NAME [sync Ma标签表到HBase表: MaLabel]"
   //脚本参数
   var env: String = _
   var filePath: String = _
