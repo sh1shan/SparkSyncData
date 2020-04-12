@@ -32,6 +32,11 @@ class MaLabel2HBaseBulkLoad(appName: String, master: String) extends BaseSparkTa
   var tableName: String = _
   var bulkPath: String = _
 
+  /**
+    * 初始化执行参数列表
+    * Spark任务配置，任务执行参数，都在这里初始化
+    * @param args 参数列表
+    */
   def initArgs(args: Array[String]): Unit = {
     env = args(0)
     filePath = args(1)
@@ -47,6 +52,12 @@ class MaLabel2HBaseBulkLoad(appName: String, master: String) extends BaseSparkTa
     logger.info(s"当前代加工的表：$tableName¬")
   }
 
+  /**
+    * HBaseFileRDD 创建过程  BuildRdd -> HadoopFile->HBase
+    * @param filePath HadoopFile  存放路径
+    * @param sparkContext spark对象
+    * @return HBaseRDD
+    */
   def bulkRdd(filePath: String, sparkContext: SparkContext): RDD[Array[String]] = {
     val rdd = sparkContext.hadoopFile(filePath, classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
       .map(a => new String(a._2.getBytes, 0, a._2.getLength, "utf-8"))
@@ -61,6 +72,11 @@ class MaLabel2HBaseBulkLoad(appName: String, master: String) extends BaseSparkTa
     rdd
   }
 
+  /**
+    * 每4000行数据打印一次日志
+    * @param count 循环次数
+    * @return
+    */
   def isLoggerEnable(count: Long): Boolean = {
     (count % 4000) == 1
   }
@@ -107,6 +123,10 @@ class MaLabel2HBaseBulkLoad(appName: String, master: String) extends BaseSparkTa
 
   }
 
+  /**
+    * 任务主要处理过程
+    * @param args 参数列表
+    */
   override def runTask(args: Array[String]): Unit = {
     logger.info(s"begin -->$TASK_NAME")
     val taskStartTime = System.currentTimeMillis()

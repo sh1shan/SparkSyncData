@@ -6,6 +6,12 @@ import jrx.anytest.recommend.batch.monitor.TaskMonitorInfo
 import jrx.anytest.recommend.batch.utils.FileLogger
 import org.apache.commons.cli.{CommandLine, CommandLineParser, DefaultParser, Options}
 
+/**
+  * 任务的抽象类，所有离线批量执行的都要继承此类
+  * 只要实现runTask方法，具体的处理都放在runTask方法上
+  * @param appName 任务名称
+  * @param master master
+  */
 abstract class BaseSparkTask(appName: String, master: String) extends Serializable {
   val appNames = appName
   val masters = master
@@ -29,10 +35,14 @@ abstract class BaseSparkTask(appName: String, master: String) extends Serializab
     }
   }
 
+  /**
+    * 指定任务参数
+    * @param args 参数列表
+    * @return
+    */
   def buildArgParser(args: Array[String]): CommandLine = {
     val parser: CommandLineParser = new DefaultParser
     val options: Options = new Options
-
     options.addOption("v", "env", true, "环境变量：dev,prd,test")
     options.addOption("x", "max", true, "最大数据量id")
     options.addOption("m", "min", true, "最小数据量id")

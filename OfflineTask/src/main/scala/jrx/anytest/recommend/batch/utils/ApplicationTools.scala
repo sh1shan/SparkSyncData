@@ -20,7 +20,7 @@ object ApplicationTools {
   val dataSource = new MysqlDataSource()
   val dataSourceMonitor = new MysqlDataSource()
   //jedi是redis的java版本的客户端
-  var jedis: JedisCluster = null
+  var jedis: JedisCluster=null
 
 
   def decode(str: String): String = {
@@ -31,8 +31,12 @@ object ApplicationTools {
     new sun.misc.BASE64Encoder().encode(str.getBytes())
   }
 
-
-  def loadConfig(env: String, redisMethod: Int = 1): Unit = {
+  /**
+    * MySQL 配置初始化
+    * Spark 监控MySQL信息配置，在每个批次中必须初始化，这样才能被BaskSparkTask中的runTask方法调用
+    * @param env 环境参数
+    */
+  def loadConfig(env: String): Unit = {
     props.load(ApplicationTools.getClass.getResourceAsStream(("/config_" + env + ".properties")))
     dataSource.setURL(props.getProperty("dataSource.mysql.url"))
     dataSource.setUser(props.getProperty("datasource.mysql.username"))
@@ -92,7 +96,7 @@ object ApplicationTools {
     val qr = new QueryRunner(dataSource)
     val sql = "insert into spark_task_monitor(task_name,start_time,end_time,total_count,process_count,args,info) values(?,?,?,?,?,?,?) "
 
-    qr.update(sql, taskInfo.taskName, taskInfo.startTime, taskInfo.endTime, taskInfo.totalCount, taskInfo.processCount, taskInfo.argument, taskInfo.info)
+    qr.update(sql, taskInfo.taskName, taskInfo.startTime, taskInfo.endTime, taskInfo.totalCount, taskInfo.processCount, taskInfo.arguments, taskInfo.info)
   }
 
   def upd_f_monitorByDay(sign: Int, batch_dt: String): Unit = {
@@ -101,6 +105,12 @@ object ApplicationTools {
     qr.update(sql, Int.box(sign), batch_dt)
   }
 
+  /**
+    *  加载配置
+    * @param env 环境
+    * @param redisMethod redis
+    * @param redisOfYxOrFk 指定加载风控的配置
+    */
   def loadConfig(env: String, redisMethod: Int, redisOfYxOrFk: Int): Unit = {
     environment = env
     props.load(ApplicationTools.getClass.getResourceAsStream("/config_" + env + ".properties"))
@@ -132,6 +142,12 @@ object ApplicationTools {
     }
   }
 
+  /**
+    *  加载配置
+    * @param env 环境
+    * @param redisMethod redis
+    * @param redisOfYxOrFk 指定加载风控的配置
+    */
   def loadConfigMonitor(env: String, redisMethod: Int, redisOfYxOrFk: Int): Unit = {
     environment = env
 
@@ -171,6 +187,11 @@ object ApplicationTools {
     }
   }
 
+  /**
+    * 单机版redis加载配置过程
+    * @param redisOfYxOrFk
+    * @return
+    */
   def redisSingle(redisOfYxOrFk: Int): Jedis = {
     val jedis = if (redisOfYxOrFk == 1) {
       new Jedis(props.getProperty("redis.yx.hostname"), props.getProperty("redis.yx.port").toInt)
@@ -179,9 +200,19 @@ object ApplicationTools {
     }
     jedis
   }
+
+  /**
+    * Ma宽表字段
+    * @return
+    */
   def maLabelField1():String={
     props.getProperty("HBase.maLabel.Field1")
   }
+
+  /**
+    * Ma宽表表名
+    * @return
+    */
   def maLabel(): String = {
     return "maLabelByDay"
   }
