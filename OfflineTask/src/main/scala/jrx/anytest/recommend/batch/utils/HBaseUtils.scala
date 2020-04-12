@@ -14,6 +14,8 @@ import org.apache.spark.{Partitioner, SparkContext}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.slf4j.{Logger, LoggerFactory}
 
+import scala.collection.JavaConverters._
+
 object HBaseUtils extends Serializable {
   val logger: Logger = LoggerFactory.getLogger(HBaseUtils.getClass)
 
@@ -318,7 +320,7 @@ object HBaseUtils extends Serializable {
     */
   def putToKeyValue(put: Put): Array[OrderedKeyValue] = {
     put.getFamilyCellMap.asScala
-      .flaMap(_._2.asScala)
+      .flatMap(_._2.asScala)
       .map(cell => new OrderedKeyValue(cell.asInstanceOf[KeyValue]))
       .toArray
   }
