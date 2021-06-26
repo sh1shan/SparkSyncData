@@ -11,6 +11,7 @@ MALBEL2CUTOMBYDAY(){
     --num-excutors 60 \
     --queue ssyx \
     --driver-memory 10g \
+    --driver-excutor 10g \
     --excutor-cores 2 \
     --conf spark.yarn.excutor.memmoryOverhead=4096 \
     --conf spark.network.timeout=500s \
